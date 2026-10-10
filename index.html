@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boids 鱼群模型动画</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #02040c; 
+            font-family: 'Inter', system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+
+        /* Panel transitions */
+        .panel-hidden {
+            transform: translateX(-120%);
+            opacity: 0;
+            pointer-events: none;
+        }
+        .panel-visible {
+            transform: translateX(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body class="relative text-gray-200">
+
+    <!-- 展开/收起按钮 -->
+    <button id="togglePanelBtn" class="fixed top-4 left-4 z-50 bg-gray-800/90 hover:bg-gray-700 backdrop-blur border border-gray-600 text-white rounded-lg p-2 shadow-lg transition-all focus:outline-none flex items-center justify-center group" title="切换控制面板">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform group-hover:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    </button>
+
+    <!-- 控制面板 -->
+    <div id="controlPanel" class="fixed top-16 left-4 z-40 w-72 bg-gray-900/80 backdrop-blur-md border border-gray-700 rounded-xl shadow-2xl p-5 max-h-[85vh] overflow-y-auto transition-all duration-300 panel-visible custom-scrollbar">
+        <h1 class="text-lg font-bold mb-1 text-white tracking-wide">Boids 鱼群控制台</h1>
+        <p class="text-xs text-gray-400 mb-2">点击画布可惊散鱼群 点击左上角按键收起</p>
+        
+        <div class="space-y-4 mt-2">
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs">
+                    <label for="sepRange">分离</label>
+                    <span id="sepVal" class="text-blue-400 font-mono">1.5</span>
+                </div>
+                <input type="range" id="sepRange" min="0" max="5" step="0.1" value="1.5">
+            </div>
+
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs">
+                    <label for="aliRange">对齐</label>
+                    <span id="aliVal" class="text-blue-400 font-mono">1.0</span>
+                </div>
+                <input type="range" id="aliRange" min="0" max="5" step="0.1" value="1.0">
+            </div>
+
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs">
+                    <label for="cohRange">凝聚</label>
+                    <span id="cohVal" class="text-blue-400 font-mono">1.0</span>
+                </div>
+                <input type="range" id="cohRange" min="0" max="5" step="0.1" value="1.0">
+            </div>
+
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs">
+                    <label for="radiusRange">感知半径</label>
+                    <span id="radiusVal" class="text-purple-400 font-mono">75</span>
+                </div>
+                <input type="range" id="radiusRange" min="20" max="150" step="1" value="75">
+            </div>
+
+            <div class="space-y-1 pt-3 border-t border-gray-700/50">
+                <div class="flex justify-between text-xs">
+                    <label for="maxSpeedRange">最大速度</label>
+                    <span id="maxSpeedVal" class="text-green-400 font-mono">1.0</span>
+                </div>
+                <input type="range" id="maxSpeedRange" min="0.3" max="3" step="0.1" value="1.0">
+            </div>
+
+            <div class="space-y-1">
+                <div class="flex justify-between text-xs">
+                    <label for="maxForceRange">转向敏捷度</label>
+                    <span id="maxForceVal" class="text-green-400 font-mono">0.05</span>
+                </div>
+                <input type="range" id="maxForceRange" min="0.005" max="0.3" step="0.005" value="0.05">
+            </div>
+
+            <div class="space-y-3 pt-3 border-t border-gray-700/50">
+                <div class="flex items-center justify-between">
+                    <label for="boidColor" class="text-xs">鱼群颜色</label>
+                    <input type="color" id="boidColor" value="#ff4500" class="h-6 w-10 rounded cursor-pointer border-0 p-0 bg-transparent">
+                </div>
+                <div class="flex items-center justify-between">
+                    <label for="bgColor" class="text-xs">背景颜色</label>
+                    <input type="color" id="bgColor" value="#02040c" class="h-6 w-10 rounded cursor-pointer border-0 p-0 bg-transparent">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let boids = [];
+        const numBoids = 120;
+
+        // 点击排斥相关的全局变量
+        let clickRepelTarget = null;
+        let repelIntensity = 0;
+
+        // 全局参数
+        const params = {
+            separation: 1.5,
+            alignment: 1.0,
+            cohesion: 1.0,
+            perceptionRadius: 75,
+            maxSpeed: 1.0,
+            maxForce: 0.05,
+            boidColor: '#ff4500',
+            bgColor: '#02040c'
+        };
+
+        class Vector2D {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            add(v) { this.x += v.x; this.y += v.y; return this; }
+            sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+            mult(n) { this.x *= n; this.y *= n; return this; }
+            div(n) { this.x /= n; this.y /= n; return this; }
+            magSq() { return this.x * this.x + this.y * this.y; }
+            mag() { return Math.sqrt(this.magSq()); }
+            
+            normalize() {
+                const len = this.mag();
+                if (len !== 0) this.mult(1 / len);
+                return this;
+            }
+            limit(max) {
+                const mSq = this.magSq();
+                if (mSq > max * max) {
+                    this.div(Math.sqrt(mSq)).mult(max);
+                }
+                return this;
+            }
+            setMag(n) { return this.normalize().mult(n); }
+            static sub(v1, v2) { return new Vector2D(v1.x - v2.x, v1.y - v2.y); }
+            static dist(v1, v2) { return Vector2D.sub(v1, v2).mag(); }
+            heading() { return Math.atan2(this.y, this.x); }
+        }
+
+        class Boid {
+            constructor() {
+                this.position = new Vector2D(Math.random() * window.innerWidth, Math.random() * window.innerHeight);
+                this.velocity = new Vector2D((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4);
+                this.acceleration = new Vector2D(0, 0);
+                this.r = 3.8; 
+                this.angle = this.velocity.heading(); 
+            }
+
+            edges() {
+                if (this.position.x > width + 20) this.position.x = -20;
+                else if (this.position.x < -20) this.position.x = width + 20;
+                if (this.position.y > height + 20) this.position.y = -20;
+                else if (this.position.y < -20) this.position.y = height + 20;
+            }
+
+            update() {
+                this.position.add(this.velocity);
+                this.velocity.add(this.acceleration);
+                
+                // 【核心优化 1】爆发时临时放宽速度上限，确保冲量能完全发挥出来
+                let currentMaxSpeed = repelIntensity > 0 ? params.maxSpeed * 4.5 : params.maxSpeed;
+                this.velocity.limit(currentMaxSpeed);
+                this.acceleration.mult(0);
+
+                let targetAngle = this.velocity.heading();
+                let diff = targetAngle - this.angle;
+                diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                this.angle += diff * 0.15;
+            }
+
+            separate(boids) {
+                let steering = new Vector2D(0, 0);
+                let total = 0;
+                let desiredSeparation = params.perceptionRadius * 0.5;
+
+                for (let other of boids) {
+                    let d = Vector2D.dist(this.position, other.position);
+                    if (other !== this && d < desiredSeparation && d > 0) {
+                        let diff = Vector2D.sub(this.position, other.position);
+                        diff.normalize();
+                        diff.div(d);
+                        steering.add(diff);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.div(total);
+                    steering.setMag(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.limit(params.maxForce);
+                }
+                return steering;
+            }
+
+            align(boids) {
+                let steering = new Vector2D(0, 0);
+                let total = 0;
+                for (let other of boids) {
+                    let d = Vector2D.dist(this.position, other.position);
+                    if (other !== this && d < params.perceptionRadius) {
+                        steering.add(other.velocity);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.div(total);
+                    steering.setMag(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.limit(params.maxForce);
+                }
+                return steering;
+            }
+
+            cohre(boids) {
+                let steering = new Vector2D(0, 0);
+                let total = 0;
+                for (let other of boids) {
+                    let d = Vector2D.dist(this.position, other.position);
+                    if (other !== this && d < params.perceptionRadius) {
+                        steering.add(other.position);
+                        total++;
+                    }
+                }
+                if (total > 0) {
+                    steering.div(total);
+                    steering.sub(this.position);
+                    steering.setMag(params.maxSpeed);
+                    steering.sub(this.velocity);
+                    steering.limit(params.maxForce);
+                }
+                return steering;
+            }
+
+            flock(boids) {
+                let sep = this.separate(boids);
+                let ali = this.align(boids);
+                let coh = this.cohre(boids);
+
+                // 【核心优化 2】点击瞬间（repelIntensity 高时），按比例压制/忽略常规鱼群聚和防撞力
+                // 这样鱼群才不会互相死拉扯、原地打转，而是顺畅地向外炸开
+                let flockFactor = 1.0 - repelIntensity; 
+
+                sep.mult(params.separation * flockFactor);
+                ali.mult(params.alignment * flockFactor);
+                coh.mult(params.cohesion * flockFactor);
+
+                this.acceleration.add(sep);
+                this.acceleration.add(ali);
+                this.acceleration.add(coh);
+
+                // 【核心优化 3】直接叠加干净利落的远离动量冲力
+                if (clickRepelTarget && repelIntensity > 0) {
+                    let d = Vector2D.dist(this.position, clickRepelTarget);
+                    let effectiveRadius = 150; // 影响波及的半径范围
+
+                    if (d < effectiveRadius) {
+                        let diff = Vector2D.sub(this.position, clickRepelTarget);
+                        diff.normalize();
+                        // 离点击中心越近推得越猛，赋予强劲的外扩速度动量
+                        let pushPower = (1 - d / effectiveRadius) * params.maxSpeed * 5.0 * repelIntensity;
+                        this.velocity.add(diff.mult(pushPower));
+                    }
+                }
+            }
+
+            show() {
+                ctx.save();
+                ctx.translate(this.position.x, this.position.y);
+                ctx.rotate(this.angle + Math.PI / 2);
+                
+                const gradient = ctx.createLinearGradient(0, -this.r * 3.5, 0, this.r * 6.0);
+                
+                let hex = params.boidColor.replace('#', '');
+                if (hex.length === 3) hex = hex.split('').map(char => char + char).join('');
+                const num = parseInt(hex, 16);
+                const r = (num >> 16) & 255;
+                const g = (num >> 8) & 255;
+                const b = num & 255;
+
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 1.0)`);
+                gradient.addColorStop(0.2, `rgba(${r}, ${g}, ${b}, 0.9)`);
+                gradient.addColorStop(0.55, `rgba(${r}, ${g}, ${b}, 0.35)`);
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.0)`);
+
+                ctx.beginPath();
+                ctx.moveTo(0, -this.r * 3.0);
+                ctx.bezierCurveTo(this.r * 1.5, -this.r * 1.0, this.r * 0.8, this.r * 4.0, 0, this.r * 10.0);
+                ctx.bezierCurveTo(-this.r * 0.8, this.r * 4.0, -this.r * 1.5, -this.r * 1.0, 0, -this.r * 3.0);
+                ctx.closePath();
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+
+        function bindUI() {
+            const bindSlider = (id, paramKey, displayId, isInt = false) => {
+                const slider = document.getElementById(id);
+                const display = document.getElementById(displayId);
+                slider.addEventListener('input', (e) => {
+                    let val = parseFloat(e.target.value);
+                    params[paramKey] = val;
+                    display.innerText = isInt ? Math.round(val) : val.toFixed(slider.step.includes('.') ? slider.step.split('.')[1].length : 1);
+                });
+            };
+
+            bindSlider('sepRange', 'separation', 'sepVal');
+            bindSlider('aliRange', 'alignment', 'aliVal');
+            bindSlider('cohRange', 'cohesion', 'cohVal');
+            bindSlider('radiusRange', 'perceptionRadius', 'radiusVal', true);
+            bindSlider('maxSpeedRange', 'maxSpeed', 'maxSpeedVal');
+            bindSlider('maxForceRange', 'maxForce', 'maxForceVal');
+
+            document.getElementById('boidColor').addEventListener('input', (e) => params.boidColor = e.target.value);
+            document.getElementById('bgColor').addEventListener('input', (e) => {
+                params.bgColor = e.target.value;
+                document.body.style.backgroundColor = params.bgColor;
+            });
+
+            const toggleBtn = document.getElementById('togglePanelBtn');
+            const panel = document.getElementById('controlPanel');
+            let isPanelVisible = true;
+
+            toggleBtn.addEventListener('click', () => {
+                isPanelVisible = !isPanelVisible;
+                if (isPanelVisible) {
+                    panel.classList.remove('panel-hidden');
+                    panel.classList.add('panel-visible');
+                    toggleBtn.style.opacity = '1';
+                } else {
+                    panel.classList.remove('panel-visible');
+                    panel.classList.add('panel-hidden');
+                    toggleBtn.style.opacity = '0.5';
+                }
+            });
+
+            // 监听画布点击事件触发强烈爆破
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                clickRepelTarget = {
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                };
+                repelIntensity = 1.0; 
+            });
+        }
+
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            for (let i = 0; i < numBoids; i++) {
+                boids.push(new Boid());
+            }
+            
+            bindUI();
+            requestAnimationFrame(animate);
+        }
+
+        function animate() {
+            ctx.fillStyle = params.bgColor;
+            ctx.fillRect(0, 0, width, height);
+
+            // 爆破强度平滑衰减（数值越小，冲击波余韵持续时间越长）
+            if (repelIntensity > 0) {
+                repelIntensity -= 0.025;
+                if (repelIntensity <= 0) {
+                    clickRepelTarget = null;
+                }
+            }
+
+            for (let boid of boids) {
+                boid.edges();
+                boid.flock(boids);
+                boid.update();
+                boid.show();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
